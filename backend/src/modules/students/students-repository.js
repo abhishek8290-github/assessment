@@ -1,4 +1,5 @@
-const { processDBRequest } = require("../../utils");
+const { processDBRequest, ApiError } = require("../../utils");
+
 
 const getRoleId = async (roleName) => {
     const query = "SELECT id FROM roles WHERE name ILIKE $1";
@@ -8,7 +9,7 @@ const getRoleId = async (roleName) => {
 }
 
 const findAllStudents = async (payload) => {
-    const { name, className, section, roll } = payload;
+    const { name, className, section, roll, limit, page } = payload;
     let query = `
         SELECT
             t1.id,
@@ -38,16 +39,26 @@ const findAllStudents = async (payload) => {
     }
 
     query += ' ORDER BY t1.id';
+    if (limit) {
+        query += `  LIMIT  $${queryParams.length + 1}`;
+        queryParams.push(limit);
+    }
+    if (page) {
+        query += `  OFFSET  $${queryParams.length + 1}`;
+        queryParams.push(page - 1);
+    }
 
     const { rows } = await processDBRequest({ query, queryParams });
     return rows;
 }
 
 const addOrUpdateStudent = async (payload) => {
-    const query = "SELECT * FROM student_add_update($1)";
-    const queryParams = [payload];
-    const { rows } = await processDBRequest({ query, queryParams });
-    return rows[0];
+    
+        const query = "SELECT * FROM student_add_update($1)";
+        const queryParams = [payload];
+        const { rows } = await processDBRequest({ query, queryParams });
+        return rows[0];
+
 }
 
 const findStudentDetail = async (id) => {
@@ -110,6 +121,31 @@ const findStudentToUpdate = async (paylaod) => {
     const { rows } = await processDBRequest({ query, queryParams });
     return rows;
 }
+const deleteStudentFromDb = async (id) => {
+    const query = `
+                WITH deleted_user AS (
+                    DELETE FROM users 
+                    WHERE id = $1 AND role_id = 3 
+                    RETURNING id
+                )
+                DELETE FROM user_profiles 
+                WHERE user_id IN (SELECT id FROM deleted_user)
+                RETURNING (SELECT id FROM deleted_user) AS "confirmedId";
+            `;
+
+    const result = await processDBRequest({
+        query: query,
+        queryParams: [id]
+    });
+
+
+    if (result.rowCount === 0 || !result.rows[0]?.confirmedId) {
+        throw new ApiError(404, "Student not found or is not authorized for deletion");
+    }
+
+    return result;
+
+};
 
 module.exports = {
     getRoleId,
@@ -117,5 +153,6 @@ module.exports = {
     addOrUpdateStudent,
     findStudentDetail,
     findStudentToSetStatus,
-    findStudentToUpdate
+    findStudentToUpdate,
+    deleteStudentFromDb
 };

@@ -15,7 +15,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use(cookieParser());
 
 app.use("/api/v1", v1Routes);
-
+app.use("/api/v1/healthcheck", () => { return "Running"});
 app.use(handle404Error);
 app.use(handleGlobalError);
 
